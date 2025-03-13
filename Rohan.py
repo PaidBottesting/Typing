@@ -348,16 +348,13 @@ def main():
     app.add_handler(CommandHandler("info", info_command))
     app.add_handler(CommandHandler("redeem", redeem_command))
 
-    # Admin commands
-    app.add_handler(CommandHandler("addadmin", add_admin))
-    app.add_handler(CommandHandler("removeadmin", remove_admin))
-    app.add_handler(CommandHandler("generate_key", generate_key_command))
-    app.add_handler(CommandHandler("active_attacks", active_attacks_command))
-    app.add_handler(CommandHandler("bot_update", bot_update))
-    app.add_handler(CommandHandler("unban", unban_command))
+     #Admin commands
+app.add_handler(CommandHandler("addadmin", add_admin))
+app.add_handler(CommandHandler("removeadmin", remove_admin))
+app.add_handler(CommandHandler("generate_key", generate_key_command))
+app.add_handler(CommandHandler("active_attacks", active_attacks_command))
+app.add_handler(CommandHandler("bot_update", bot_update))
+app.add_handler(CommandHandler("unban", unban_command))
 
-    print("🤖 Bot is running...")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+print("🤖 Bot is running...")
+app.run_polling()
