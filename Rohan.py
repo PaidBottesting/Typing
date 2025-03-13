@@ -339,7 +339,7 @@ async def attack_command(update: Update, context: CallbackContext):
 # ================== APPLICATION SETUP ==================
 
 def main():
-    app = Application.builder().token(TOKEN).build()
+    app = Application.builder().token(8094930692:AAGy-bnpYA0A1j6B3lRWol-GyfK9gtiMwCo).build()
 
     # User commands
     app.add_handler(CommandHandler("start", start_command))  # Add start command
